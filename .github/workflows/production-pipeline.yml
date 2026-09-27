@@ -19,10 +19,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -43,13 +43,13 @@ jobs:
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -57,7 +57,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -65,7 +65,7 @@ jobs:
             type=ref,event=branch
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
@@ -81,10 +81,15 @@ jobs:
     environment: staging
     steps:
       - name: Deploy to staging
+        env:
+          # metadata-action returns several tags separated by newlines,
+          # so they are passed through env instead of direct substitution into the script
+          IMAGE_TAGS: ${{ needs.build.outputs.image-tag }}
         run: |
           echo "Deploying to staging..."
-          echo "Image: ${{ needs.build.outputs.image-tag }}"
-          # kubectl set image deployment/app app=${{ needs.build.outputs.image-tag }}
+          IMAGE=$(echo "$IMAGE_TAGS" | head -n 1)
+          echo "Image: $IMAGE"
+          # kubectl set image deployment/app app="$IMAGE"
 
   # Stage 4: Deploy to Production
   deploy-production:
@@ -94,6 +99,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Deploy to production
+        env:
+          IMAGE_TAGS: ${{ needs.build.outputs.image-tag }}
         run: |
           echo "Deploying to production..."
-          echo "Image: ${{ needs.build.outputs.image-tag }}"
+          echo "Image: $(echo "$IMAGE_TAGS" | head -n 1)"
